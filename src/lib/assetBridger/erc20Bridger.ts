@@ -159,111 +159,6 @@ export interface Erc20DepositFunctionArgs {
 }
 
 /**
- * A deposit of tokens from L1 to L2
- */
-class Erc20Deposit implements Erc20DepositFunctionArgs {
-  public readonly erc20L1Address: string
-  public readonly amount: BigNumber
-  public readonly depositCallValue: BigNumber
-  public readonly maxSubmissionFee: BigNumber
-  public readonly l2GasLimit: BigNumber
-  public readonly l2MaxFeePerGas: BigNumber
-  public readonly destinationAddress: string
-
-  public readonly l1Signer: Signer
-  public readonly l2Network: L2Network
-
-  private readonly data: string
-  private readonly l1Provider: Provider
-
-  public constructor(iFunctionArgs: Erc20DepositFunctionArgs) {
-    this.erc20L1Address = iFunctionArgs.erc20L1Address
-    this.amount = iFunctionArgs.amount
-    this.depositCallValue = iFunctionArgs.depositCallValue
-    this.maxSubmissionFee = iFunctionArgs.maxSubmissionFee
-    this.data = defaultAbiCoder.encode(
-      ['uint256', 'bytes'],
-      [iFunctionArgs.maxSubmissionFee, '0x']
-    )
-    this.l2GasLimit = iFunctionArgs.l2GasLimit
-    this.l2MaxFeePerGas = iFunctionArgs.l2MaxFeePerGas
-    this.destinationAddress = iFunctionArgs.destinationAddress
-    this.l1Signer = iFunctionArgs.l1Signer
-    this.l2Network = iFunctionArgs.l2Network
-
-    // ensure the signer has a provider
-    this.l1Provider = SignerProviderUtils.getProviderOrThrow(this.l1Signer)
-  }
-
-  /**
-   * The max amount of gas spent on L2 operations
-   * MaxSubmissionCost + ( l2GasLimit * l2MaxFeePerGas )
-   * @returns
-   */
-  public l2GasCostMax() {
-    return this.maxSubmissionFee.add(this.l2GasLimit.mul(this.l2MaxFeePerGas))
-  }
-
-  /**
-   * The max amount of gas spent on L1 operations
-   * ( l1GasLimit * l1GasPrice )
-   * @returns
-   */
-  public async l1GasCostMax(overrides?: Overrides) {
-    const l1GasEstimate = await this.l1EstimateGas(overrides)
-    const l1GasPrice = await this.l1Provider.getGasPrice()
-
-    return l1GasEstimate.mul(l1GasPrice)
-  }
-
-  /**
-   * Format this token deposit as transaction data
-   * @returns
-   */
-  public toTxData() {
-    const l1GatewayRouterInterface = L1GatewayRouter__factory.createInterface()
-
-    const functionData = l1GatewayRouterInterface.encodeFunctionData(
-      'outboundTransfer',
-      [
-        this.erc20L1Address,
-        this.destinationAddress,
-        this.amount,
-        this.l2GasLimit,
-        this.l2MaxFeePerGas,
-        this.data,
-      ]
-    )
-
-    return {
-      to: this.l2Network.tokenBridge.l1GatewayRouter,
-      data: functionData,
-      value: this.depositCallValue,
-    }
-  }
-
-  /**
-   * Estimate the L1 gas limit for this token deposit
-   * @returns
-   */
-  public async l1EstimateGas(overrides?: Overrides) {
-    const txData = this.toTxData()
-    return await this.l1Provider.estimateGas({ ...txData, ...overrides })
-  }
-
-  /**
-   * Execute this token deposit by sending an L1 transaction
-   * @returns
-   */
-  public async send(overrides?: Overrides): Promise<L1ContractCallTransaction> {
-    const txData = this.toTxData()
-
-    const tx = await this.l1Signer.sendTransaction({ ...txData, ...overrides })
-    return L1TransactionReceipt.monkeyPatchContractCallWait(tx)
-  }
-}
-
-/**
  * Bridger for moving ERC20 tokens back and forth betwen L1 to L2
  */
 export class Erc20Bridger extends AssetBridger<
@@ -519,6 +414,62 @@ export class Erc20Bridger extends AssetBridger<
       (await l1GatewayRouter.l1TokenToGateway(l1TokenAddress)) ===
       DISABLED_GATEWAY
     )
+  }
+
+  /**
+   * The max amount of gas spent on L2 operations
+   * MaxSubmissionCost + ( l2GasLimit * l2MaxFeePerGas )
+   * @returns
+   */
+  public async l2GasCostMax(params: Erc20DepositFunctionArgs) {
+    return params.maxSubmissionFee.add(params.l2GasLimit.mul(params.l2MaxFeePerGas))
+  }
+
+  /**
+   * The max amount of gas spent on L1 operations
+   * ( l1GasLimit * l1GasPrice )
+   * @returns
+   */
+   public async l1GasCostMax(params: Erc20DepositFunctionArgs, l1Provider: Provider, overrides?: Overrides) {
+    const l1GasEstimate = await this.l1EstimateGas(params, l1Provider, overrides)
+    const l1GasPrice = await l1Provider.getGasPrice()
+
+    return l1GasEstimate.mul(l1GasPrice)
+  }
+
+  /**
+   * Format this token deposit as transaction data
+   * @returns
+   */
+  public toTxData(params: Erc20DepositFunctionArgs) {
+    const l1GatewayRouterInterface = L1GatewayRouter__factory.createInterface()
+
+    const functionData = l1GatewayRouterInterface.encodeFunctionData(
+      'outboundTransfer',
+      [
+        params.erc20L1Address,
+        params.destinationAddress,
+        params.amount,
+        params.l2GasLimit,
+        params.l2MaxFeePerGas,
+        params.data,
+      ]
+    )
+
+    return {
+      to: params.l2Network.tokenBridge.l1GatewayRouter,
+      data: functionData,
+      value: params.depositCallValue,
+    }
+  }
+
+  /**
+   * Estimate the L1 gas limit for this token deposit
+   * @returns
+   */
+   public async l1EstimateGas(params: Erc20DepositFunctionArgs, l1Provider: Provider, overrides?: Overrides) {
+    const txData = this.toTxData(params)
+    return await l1Provider.estimateGas({ ...txData, ...overrides })
   }
 
   /**
