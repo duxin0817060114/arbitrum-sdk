@@ -195,10 +195,6 @@ describe.only('standard ERC20', () => {
           base: BigNumber.from(100000000),
           percentIncrease: BigNumber.from(0),
         },
-        maxSubmissionFee: {
-          base: BigNumber.from(205568),
-          percentIncrease: BigNumber.from(0),
-        },
       }
     )
     const retryable = tx.waitRes.message
