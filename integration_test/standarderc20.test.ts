@@ -189,7 +189,17 @@ describe.only('standard ERC20', () => {
       testState.l1Signer,
       testState.l2Signer,
       L1ToL2MessageStatus.REDEEMED,
-      GatewayType.STANDARD
+      GatewayType.STANDARD,
+      {
+        maxFeePerGas: {
+          base: BigNumber.from(100000000),
+          percentIncrease: BigNumber.from(0),
+        },
+        maxSubmissionFee: {
+          base: BigNumber.from(205568),
+          percentIncrease: BigNumber.from(0),
+        },
+      }
     )
     const retryable = tx.waitRes.message
     expect(
