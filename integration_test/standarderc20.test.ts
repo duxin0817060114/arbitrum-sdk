@@ -40,7 +40,7 @@ import { ERC20__factory } from '../src/lib/abi/factories/ERC20__factory'
 const depositAmount = BigNumber.from(100)
 const withdrawalAmount = BigNumber.from(10)
 
-describe('standard ERC20', () => {
+describe.only('standard ERC20', () => {
   beforeEach('skipIfMainnet', async function () {
     await skipIfMainnet(this)
   })
@@ -180,5 +180,49 @@ describe('standard ERC20', () => {
         testState.l1Signer.provider!
       ),
     })
+  })
+  it.only('retryable ticket account balance correctly', async () => {
+    const tx = await depositToken(
+      depositAmount,
+      testState.l1Token.address,
+      testState.erc20Bridger,
+      testState.l1Signer,
+      testState.l2Signer,
+      L1ToL2MessageStatus.REDEEMED,
+      GatewayType.STANDARD
+    )
+    const retryable = tx.waitRes.message
+    expect(
+      retryable.messageData.excessFeeRefundAddress ===
+        (await testState.l2Signer.getAddress())
+    )
+    const l1value = retryable.messageData.l1Value
+    const l2res = await retryable.getAutoRedeemAttempt()
+    expect(l2res).is.not.null
+    if (l2res) {
+      const l2fee = l2res.effectiveGasPrice.mul(l2res.gasUsed)
+      const prevL2Balance = await testState.l2Signer.getBalance(
+        l2res.blockNumber - 1
+      )
+      const currL2Balance = await testState.l2Signer.getBalance(
+        l2res.blockNumber
+      )
+      const submissionFee = retryable.l1BaseFee.mul(
+        1400 + (6 * (retryable.messageData.data.length - 2)) / 2
+      )
+      const expectedBal = prevL2Balance
+        .add(l1value) // Deposit / Callvalue from L1
+        .sub(l2fee) // Gas used to redeem retryable
+        .sub(submissionFee) // Submission fee charged
+      console.log(`submissionFee: ${submissionFee.toString()}`)
+      console.log(`l2fee: ${l2fee.toString()}`)
+      console.log(`l1value: ${l1value.toString()}`)
+      console.log(`prevL2Balance: ${prevL2Balance.toString()}`)
+      console.log(`expectedBal: ${expectedBal.toString()}`)
+      console.log(`currL2Balance: ${currL2Balance.toString()}`)
+      console.log(`change: ${currL2Balance.sub(prevL2Balance).toString()}`)
+      console.log(`diff: ${currL2Balance.sub(expectedBal).toString()}`)
+      expect(expectedBal.toString()).eq(currL2Balance.toString())
+    }
   })
 })
