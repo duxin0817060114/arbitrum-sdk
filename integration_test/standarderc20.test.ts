@@ -214,6 +214,13 @@ describe.only('standard ERC20', () => {
         .add(l1value) // Deposit / Callvalue from L1
         .sub(l2fee) // Gas used to redeem retryable
         .sub(submissionFee) // Submission fee charged
+      console.log(`block: ${l2res.blockNumber}`)
+      console.log(
+        `creation ${
+          (await retryable.getRetryableCreationReceipt())?.transactionHash
+        }`
+      )
+      console.log(`txhash: ${l2res.transactionHash}`)
       console.log(`submissionFee: ${submissionFee.toString()}`)
       console.log(`l2fee: ${l2fee.toString()}`)
       console.log(`l1value: ${l1value.toString()}`)
